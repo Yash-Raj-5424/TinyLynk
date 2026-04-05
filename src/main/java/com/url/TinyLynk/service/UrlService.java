@@ -35,4 +35,9 @@ public class UrlService {
         return baseUrl + "/" + shortCode;
     }
 
+    public String resolveCode(String shortCode) {
+        UrlMapping mapping = urlMappingRepository.findByShortCodeAndActiveTrue(shortCode)
+                .orElseThrow(() -> new RuntimeException("Short code not found: " + shortCode));
+        return mapping.getOriginalUrl();
+    }
 }

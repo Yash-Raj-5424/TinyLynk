@@ -16,7 +16,7 @@ public class UrlController {
 
     private final UrlService urlService;
 
-    @PostMapping
+    @PostMapping("/shorten")
     public ResponseEntity<String> shortenUrl(@RequestBody String originalUrl) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(urlService.shortenUrl(originalUrl));
