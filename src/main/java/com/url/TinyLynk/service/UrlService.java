@@ -1,5 +1,8 @@
 package com.url.TinyLynk.service;
 
+import com.url.TinyLynk.dto.ShortenRequestDto;
+import com.url.TinyLynk.exceptions.UrlExpiredException;
+import com.url.TinyLynk.exceptions.UrlNotFoundException;
 import com.url.TinyLynk.model.UrlMapping;
 import com.url.TinyLynk.repository.UrlMappingRepository;
 import com.url.TinyLynk.util.Base62Encoder;
@@ -7,6 +10,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+
+import java.time.OffsetDateTime;
 
 @Service
 @RequiredArgsConstructor
@@ -19,10 +24,11 @@ public class UrlService {
     @Value("${app.base-url}")
     private String baseUrl;
 
-    public String shortenUrl(String originalUrl) {
+    public String shortenUrl(ShortenRequestDto request) {
 
         UrlMapping mapping = UrlMapping.builder()
-                .originalUrl(originalUrl)
+                .originalUrl(request.getUrl())
+                .expiresAt(request.getExpiresAt())
                 .build();
         mapping = urlMappingRepository.save(mapping);
 
@@ -30,14 +36,21 @@ public class UrlService {
         mapping.setShortCode(shortCode);
         urlMappingRepository.save(mapping);
 
-        log.info("Created Short URL: {} -> {}", shortCode, originalUrl);
+        log.info("Created Short URL: {} -> {}", shortCode, request.getUrl());
 
         return baseUrl + "/" + shortCode;
     }
 
     public String resolveCode(String shortCode) {
         UrlMapping mapping = urlMappingRepository.findByShortCodeAndActiveTrue(shortCode)
-                .orElseThrow(() -> new RuntimeException("Short code not found: " + shortCode));
+                .orElseThrow(() -> new UrlNotFoundException("Short code not found: " + shortCode));
+
+        if(mapping.getExpiresAt() != null && OffsetDateTime.now().isAfter(mapping.getExpiresAt())) {
+            mapping.setActive(false);
+            urlMappingRepository.save(mapping);
+            throw new UrlExpiredException("Short code has expired: " + shortCode);
+        }
+
         return mapping.getOriginalUrl();
     }
 }
