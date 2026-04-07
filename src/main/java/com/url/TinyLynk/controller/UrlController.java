@@ -2,6 +2,7 @@ package com.url.TinyLynk.controller;
 
 import com.url.TinyLynk.dto.ShortenRequestDto;
 import com.url.TinyLynk.service.UrlService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -18,7 +19,7 @@ public class UrlController {
     private final UrlService urlService;
 
     @PostMapping("/shorten")
-    public ResponseEntity<String> shortenUrl(@RequestBody ShortenRequestDto request) {
+    public ResponseEntity<String> shortenUrl(@Valid @RequestBody ShortenRequestDto request) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(urlService.shortenUrl(request));
     }
