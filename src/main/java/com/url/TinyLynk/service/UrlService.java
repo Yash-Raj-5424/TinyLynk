@@ -97,4 +97,14 @@ public class UrlService {
                 .orElseThrow(() -> new UrlNotFoundException("Short code not found: " + shortCode));
     }
 
+    public void deactivateUrl(String shortCode) {
+        UrlMapping mapping = urlMappingRepository.findByShortCodeAndActiveTrue(shortCode)
+                .orElseThrow(() -> new UrlNotFoundException("Short code not found: " + shortCode));
+
+        mapping.setActive(false);
+        urlMappingRepository.save(mapping);
+        redisTemplate.delete(CACHE_PREFIX + shortCode);
+
+        log.info("Deactivated short code: {}", shortCode);
+    }
 }

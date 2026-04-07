@@ -28,4 +28,10 @@ public class UrlController {
         return ResponseEntity.ok(urlService.getStats(shortCode));
     }
 
+    @DeleteMapping("/url/{shortCode}")
+    public ResponseEntity<Void> deactivateUrl(@PathVariable String shortCode) {
+        urlService.deactivateUrl(shortCode);
+        return ResponseEntity.noContent().build();
+    }
+
 }
