@@ -2,6 +2,7 @@ package com.url.TinyLynk.service;
 
 import com.url.TinyLynk.dto.ClickEvent;
 import com.url.TinyLynk.dto.ShortenRequestDto;
+import com.url.TinyLynk.dto.ShortenResponseDto;
 import com.url.TinyLynk.exceptions.UrlExpiredException;
 import com.url.TinyLynk.exceptions.UrlNotFoundException;
 import com.url.TinyLynk.model.UrlMapping;
@@ -36,7 +37,7 @@ public class UrlService {
     @Value("${app.kafka.topic.click-events}")
     private String clickEventsTopic;
 
-    public String shortenUrl(ShortenRequestDto request) {
+    public ShortenResponseDto shortenUrl(ShortenRequestDto request) {
 
         UrlMapping mapping = UrlMapping.builder()
                 .originalUrl(request.getUrl())
@@ -46,11 +47,14 @@ public class UrlService {
 
         String shortCode = encoder.encode(mapping.getId());
         mapping.setShortCode(shortCode);
-        urlMappingRepository.save(mapping);
+        mapping = urlMappingRepository.save(mapping);
 
         log.info("Created Short URL: {} -> {}", shortCode, request.getUrl());
 
-        return baseUrl + "/" + shortCode;
+        return ShortenResponseDto.builder()
+                .shortUrl(baseUrl + "/" + shortCode)
+                .expiresAt(mapping.getExpiresAt())
+                .build();
     }
 
     public String resolveCode(String shortCode) {
@@ -87,4 +91,10 @@ public class UrlService {
 
         return mapping.getOriginalUrl();
     }
+
+    public UrlMapping getStats(String shortCode) {
+        return urlMappingRepository.findByShortCodeAndActiveTrue(shortCode)
+                .orElseThrow(() -> new UrlNotFoundException("Short code not found: " + shortCode));
+    }
+
 }
