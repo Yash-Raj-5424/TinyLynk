@@ -1,5 +1,6 @@
 package com.url.TinyLynk.service;
 
+import com.url.TinyLynk.dto.ClickEvent;
 import com.url.TinyLynk.dto.ShortenRequestDto;
 import com.url.TinyLynk.exceptions.UrlExpiredException;
 import com.url.TinyLynk.exceptions.UrlNotFoundException;
@@ -10,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
@@ -23,12 +25,16 @@ public class UrlService {
     private final UrlMappingRepository urlMappingRepository;
     private final Base62Encoder encoder;
     private final RedisTemplate<String, Object> redisTemplate;
+    private final KafkaTemplate<String, ClickEvent> kafkaTemplate;
 
     private static final String CACHE_PREFIX = "url:";
     private static final long CACHE_TTL_SECONDS = 86400L;
 
     @Value("${app.base-url}")
     private String baseUrl;
+
+    @Value("${app.kafka.topic.click-events}")
+    private String clickEventsTopic;
 
     public String shortenUrl(ShortenRequestDto request) {
 
@@ -73,6 +79,11 @@ public class UrlService {
         }
 
         redisTemplate.opsForValue().set(cacheKey, mapping, CACHE_TTL_SECONDS, TimeUnit.SECONDS);
+
+        kafkaTemplate.send(clickEventsTopic, shortCode, ClickEvent.builder()
+                .shortCode(shortCode)
+                .clickedAt(OffsetDateTime.now())
+                .build());
 
         return mapping.getOriginalUrl();
     }
