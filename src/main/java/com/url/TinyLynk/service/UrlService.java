@@ -53,6 +53,7 @@ public class UrlService {
 
         return ShortenResponseDto.builder()
                 .shortUrl(baseUrl + "/" + shortCode)
+                .shortCode(shortCode)
                 .expiresAt(mapping.getExpiresAt())
                 .build();
     }
@@ -62,44 +63,53 @@ public class UrlService {
 
         UrlMapping cached = (UrlMapping) redisTemplate.opsForValue().get(cacheKey);
 
+        UrlMapping mapping;
         if(cached != null) {
             if(cached.getExpiresAt() != null && OffsetDateTime.now().isAfter(cached.getExpiresAt())) {
                 redisTemplate.delete(cacheKey);
-                throw new UrlExpiredException("Short code has expired: " + shortCode);
+                throw new UrlExpiredException(shortCode);
             }
             log.info("Cache hit for short code: {}", shortCode);
-            return cached.getOriginalUrl();
+            mapping = cached;
+        } else {
+            log.info("Cache miss for short code: {}", shortCode);
+
+            mapping = urlMappingRepository.findByShortCodeAndActiveTrue(shortCode)
+                    .orElseThrow(() -> new UrlNotFoundException(shortCode));
+
+            if(mapping.getExpiresAt() != null && OffsetDateTime.now().isAfter(mapping.getExpiresAt())) {
+                mapping.setActive(false);
+                urlMappingRepository.save(mapping);
+                throw new UrlExpiredException(shortCode);
+            }
+
+            redisTemplate.opsForValue().set(cacheKey, mapping, CACHE_TTL_SECONDS, TimeUnit.SECONDS);
         }
 
-        log.info("Cache miss for short code: {}", shortCode);
-
-        UrlMapping mapping = urlMappingRepository.findByShortCodeAndActiveTrue(shortCode)
-                .orElseThrow(() -> new UrlNotFoundException("Short code not found: " + shortCode));
-
-        if(mapping.getExpiresAt() != null && OffsetDateTime.now().isAfter(mapping.getExpiresAt())) {
-            mapping.setActive(false);
-            urlMappingRepository.save(mapping);
-            throw new UrlExpiredException("Short code has expired: " + shortCode);
-        }
-
-        redisTemplate.opsForValue().set(cacheKey, mapping, CACHE_TTL_SECONDS, TimeUnit.SECONDS);
-
-        kafkaTemplate.send(clickEventsTopic, shortCode, ClickEvent.builder()
-                .shortCode(shortCode)
-                .clickedAt(OffsetDateTime.now())
-                .build());
+        recordClick(shortCode);
 
         return mapping.getOriginalUrl();
     }
 
+    private void recordClick(String shortCode) {
+        try {
+            kafkaTemplate.send(clickEventsTopic, shortCode, ClickEvent.builder()
+                    .shortCode(shortCode)
+                    .clickedAt(OffsetDateTime.now())
+                    .build());
+        } catch (Exception e) {
+            log.warn("Failed to publish click event for short code {}: {}", shortCode, e.getMessage());
+        }
+    }
+
     public UrlMapping getStats(String shortCode) {
         return urlMappingRepository.findByShortCodeAndActiveTrue(shortCode)
-                .orElseThrow(() -> new UrlNotFoundException("Short code not found: " + shortCode));
+                .orElseThrow(() -> new UrlNotFoundException(shortCode));
     }
 
     public void deactivateUrl(String shortCode) {
         UrlMapping mapping = urlMappingRepository.findByShortCodeAndActiveTrue(shortCode)
-                .orElseThrow(() -> new UrlNotFoundException("Short code not found: " + shortCode));
+                .orElseThrow(() -> new UrlNotFoundException(shortCode));
 
         mapping.setActive(false);
         urlMappingRepository.save(mapping);
